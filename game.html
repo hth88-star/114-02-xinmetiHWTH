@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>打地鼠遊戲 (Whack-a-Mole)</title>
+    <style>
+        :root {
+            --bg-color: #1a1a2e;
+            --primary-color: #e94560;
+            --secondary-color: #0f3460;
+            --text-color: #ffffff;
+            --mole-color: #ff9d00;
+            --hole-color: #16213e;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+            overflow: hidden;
+            cursor: crosshair; /* 模擬準星/木槌 */
+        }
+
+        h1 {
+            font-size: 3rem;
+            margin-bottom: 10px;
+            text-transform: uppercase;
+            letter-spacing: 5px;
+            text-shadow: 0 0 10px var(--primary-color);
+        }
+
+        .stats {
+            display: flex;
+            gap: 30px;
+            font-size: 1.5rem;
+            margin-bottom: 20px;
+            background: rgba(255, 255, 255, 0.1);
+            padding: 10px 30px;
+            border-radius: 50px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+        }
+
+        .score-board::before { content: "得分: "; color: #aaa; font-size: 1rem; }
+        .timer-board::before { content: "剩餘時間: "; color: #aaa; font-size: 1rem; }
+
+        .game-board {
+            display: grid;
+            grid-template-columns: repeat(3, 160px);
+            grid-template-rows: repeat(3, 160px);
+            gap: 20px;
+            padding: 20px;
+            background: var(--secondary-color);
+            border-radius: 20px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+        }
+
+        .hole {
+            position: relative;
+            background: var(--hole-color);
+            border-radius: 50%;
+            overflow: hidden;
+            border: 4px solid #000;
+            box-shadow: inset 0 10px 20px rgba(0, 0, 0, 0.8);
+        }
+
+        /* 泥土/洞穴內側效果 */
+        .hole::after {
+            content: '';
+            position: absolute;
+            bottom: -10px;
+            left: 0;
+            width: 100%;
+            height: 30px;
+            background: #222;
+            border-radius: 50%;
+            z-index: 10;
+        }
+
+        .mole {
+            position: absolute;
+            top: 100%;
+            left: 50%;
+            width: 80%;
+            height: 80%;
+            background: var(--mole-color);
+            border-radius: 50% 50% 20% 20%;
+            transform: translateX(-50%);
+            transition: top 0.1s ease-out;
+            z-index: 5;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 -5px 15px rgba(0, 0, 0, 0.3);
+        }
+
+        /* 地鼠眼睛 */
+        .mole::before, .mole::after {
+            content: '';
+            position: absolute;
+            top: 30%;
+            width: 10px;
+            height: 10px;
+            background: #000;
+            border-radius: 50%;
+        }
+        .mole::before { left: 25%; }
+        .mole::after { right: 25%; }
+
+        /* 地鼠冒出樣式 */
+        .hole.up .mole {
+            top: 20%;
+        }
+
+        /* 炸彈樣式 */
+        .mole.bomb {
+            background: #2d3436; /* 炸彈顏色 */
+            box-shadow: 0 -5px 15px rgba(0, 0, 0, 0.6);
+        }
+
+        /* 炸彈引信 */
+        .mole.bomb::before {
+            content: '';
+            position: absolute;
+            top: -15px;
+            left: 50%;
+            width: 4px;
+            height: 15px;
+            background: #636e72;
+            transform: translateX(-50%);
+        }
+
+        /* 炸彈火花 */
+        .mole.bomb::after {
+            content: '🔥';
+            position: absolute;
+            top: -25px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 15px;
+            animation: flicker 0.2s infinite;
+        }
+
+        @keyframes flicker {
+            0% { opacity: 0.8; transform: translateX(-50%) scale(1); }
+            50% { opacity: 1; transform: translateX(-50%) scale(1.2); }
+            100% { opacity: 0.8; transform: translateX(-50%) scale(1); }
+        }
+
+        .btn-start {
+            margin-top: 30px;
+            padding: 15px 40px;
+            font-size: 1.2rem;
+            font-weight: bold;
+            color: white;
+            background: var(--primary-color);
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: transform 0.2s, background 0.2s;
+            box-shadow: 0 5px 15px rgba(233, 69, 96, 0.4);
+        }
+
+        .btn-start:hover {
+            background: #ff4d6d;
+            transform: scale(1.05);
+        }
+
+        .btn-start:active {
+            transform: scale(0.95);
+        }
+
+        /* 打擊特效 */
+        .mole.hit {
+            background: #ff4d6d !important;
+            animation: hit-anim 0.2s ease;
+        }
+
+        @keyframes hit-anim {
+            0% { transform: translateX(-50%) scale(1); }
+            50% { transform: translateX(-50%) scale(0.8); }
+            100% { transform: translateX(-50%) scale(1); }
+        }
+
+        .game-over {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.9);
+            padding: 40px;
+            border-radius: 20px;
+            text-align: center;
+            display: none;
+            z-index: 100;
+            border: 2px solid var(--primary-color);
+        }
+    </style>
+</head>
+<body>
+
+    <h1>WHACK-A-MOLE</h1>
+
+    <div class="stats">
+        <div class="score-board" id="score">0</div>
+        <div class="timer-board" id="timer">30</div>
+    </div>
+
+    <div class="game-board">
+        <div class="hole"><div class="mole"></div></div>
+        <div class="hole"><div class="mole"></div></div>
+        <div class="hole"><div class="mole"></div></div>
+        <div class="hole"><div class="mole"></div></div>
+        <div class="hole"><div class="mole"></div></div>
+        <div class="hole"><div class="mole"></div></div>
+        <div class="hole"><div class="mole"></div></div>
+        <div class="hole"><div class="mole"></div></div>
+        <div class="hole"><div class="mole"></div></div>
+    </div>
+
+    <button class="btn-start" onclick="startGame()">開始挑戰</button>
+
+    <div class="game-over" id="game-over-screen">
+        <h2 id="game-over-title">遊戲結束!</h2>
+        <p style="font-size: 1.5rem;">最終得分: <span id="final-score">0</span></p>
+        <p id="game-over-msg" style="color: #aaa; margin-bottom: 20px;"></p>
+        <button class="btn-start" onclick="closeGameOver()">重新開始</button>
+    </div>
+
+    <script>
+        const holes = document.querySelectorAll('.hole');
+        const scoreBoard = document.querySelector('#score');
+        const timerBoard = document.querySelector('#timer');
+        const moles = document.querySelectorAll('.mole');
+        const gameOverScreen = document.getElementById('game-over-screen');
+        const finalScoreDisplay = document.getElementById('final-score');
+        const gameOverTitle = document.getElementById('game-over-title');
+        const gameOverMsg = document.getElementById('game-over-msg');
+
+        let lastHole;
+        let timeUp = false;
+        let score = 0;
+        let timeLeft = 30;
+        let countdown;
+
+        // 產生隨機時間 (地鼠冒出的持續時間)
+        function randomTime(min, max) {
+            return Math.round(Math.random() * (max - min) + min);
+        }
+
+        // 隨機選擇洞穴
+        function randomHole(holes) {
+            const idx = Math.floor(Math.random() * holes.length);
+            const hole = holes[idx];
+            if (hole === lastHole) {
+                return randomHole(holes);
+            }
+            lastHole = hole;
+            return hole;
+        }
+
+        // 地鼠冒出
+        function peep() {
+            const time = randomTime(500, 1500); // 隨機持續 0.5s ~ 1.5s
+            const hole = randomHole(holes);
+            const mole = hole.querySelector('.mole');
+
+            // 20% 機率生成炸彈
+            const isBomb = Math.random() < 0.2;
+            if (isBomb) {
+                mole.classList.add('bomb');
+            } else {
+                mole.classList.remove('bomb');
+            }
+
+            hole.classList.add('up');
+            
+            setTimeout(() => {
+                hole.classList.remove('up');
+                if (!timeUp) peep();
+            }, time);
+        }
+
+        // 開始遊戲
+        function startGame() {
+            // 重置狀態
+            score = 0;
+            timeLeft = 30;
+            timeUp = false;
+            scoreBoard.textContent = 0;
+            timerBoard.textContent = timeLeft;
+            gameOverScreen.style.display = 'none';
+
+            peep();
+
+            // 啟動倒數計時
+            clearInterval(countdown);
+            countdown = setInterval(() => {
+                timeLeft--;
+                timerBoard.textContent = timeLeft;
+                if (timeLeft <= 0) {
+                    endGame("時間到！");
+                }
+            }, 1000);
+        }
+
+        // 結束遊戲
+        function endGame(reason) {
+            clearInterval(countdown);
+            timeUp = true;
+            showGameOver(reason);
+        }
+
+        // 打擊邏輯
+        function bonk(e) {
+            if (!e.isTrusted) return; // 防止腳本模擬點擊
+            if (!this.parentElement.classList.contains('up')) return; // 沒冒出來不能打
+
+            if (this.classList.contains('bomb')) {
+                // 打到炸彈了！
+                this.classList.add('hit');
+                endGame("你誤擊了炸彈！遊戲結束 💣");
+                return;
+            }
+
+            score++;
+            this.classList.add('hit');
+            this.parentElement.classList.remove('up');
+            
+            // 短暫延遲後移除打擊特效
+            setTimeout(() => {
+                this.classList.remove('hit');
+            }, 200);
+
+            scoreBoard.textContent = score;
+        }
+
+        // 顯示結算畫面
+        function showGameOver(reason) {
+            finalScoreDisplay.textContent = score;
+            gameOverTitle.textContent = timeLeft <= 0 ? "時間到!" : "BOOM!";
+            gameOverMsg.textContent = reason;
+            gameOverScreen.style.display = 'block';
+        }
+
+        // 關閉結算畫面並重啟
+        function closeGameOver() {
+            gameOverScreen.style.display = 'none';
+            startGame();
+        }
+
+        // 為所有地鼠綁定點擊事件
+        moles.forEach(mole => mole.addEventListener('click', bonk));
+
+    </script>
+</body>
+</html>
